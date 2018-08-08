@@ -16,11 +16,18 @@ function onInstallation(bot, installer) {
             } else {
                 convo.say('I am a bot that has just joined your team');
                 convo.say('You must now /invite me to a channel so that I can be of use!');
+                convo.say("Send me a direct message that say \'set up profile\' to help me get some information about you!");
             }
         });
     }
 }
 
+var userProfiles = {};
+userProfiles["SampleKey"] = {
+    name: "Tomato Bot",
+    phoneNumber: "8675309",
+    carrier: "Boost Mobile"
+};
 
 /**
  * Configure the persistence options
@@ -56,6 +63,8 @@ if (process.env.TOKEN || process.env.SLACK_TOKEN) {
     process.exit(1);
 }
 
+var todoList = ["Drink Water", "Fight a Bear", "Eat tacos", "Harass Kevin at www.slack.com"];
+
 
 /**
  * A demonstration for how to handle websocket events. In this case, just log when we have and have not
@@ -85,10 +94,159 @@ controller.on('bot_channel_join', function (bot, message) {
     bot.reply(message, "I'm here!")
 });
 
-controller.hears('hello', 'direct_message', function (bot, message) {
-    bot.reply(message, 'Hello!');
-});
+/*
+controller.hears(
+    ['set up profile', 'profile set up'],
+    ['direct_message'],
+    function(bot, message) {
 
+        bot.startConversation(message, function(err, convo){
+            convo.addQuestion("What is your name?", function(response, convo){
+                userProfiles[message.user].name = response.text;
+                convo.sayFirst("Hi " + userProfiles[message.user].name);
+            })
+        })
+    }
+
+)*/
+
+//greeting
+controller.hears(
+    ['hello', 'hi', 'hey', 'greetings', 'good morning'],
+    ['direct_mention', 'mention', 'direct_message'],
+    function(bot, message) {
+        bot.startConversation(message, function(err, convo){
+            convo.say("Hello!");
+            convo.say("Here is your To-do List: \n" + formatToDoList(todoList))
+            convo.addQuestion("Would you like to start today over with a blank list?", function(response,convo){
+                if(response.text == 'yes'|| response.text == 'Yes'){
+                    todoList = [];
+                    convo.sayFirst("Here is your empty Todo List: " + formatToDoList(todoList));
+                    convo.next();
+                }
+                convo.next();
+            })
+            convo.addQuestion("Would you like to add anything to your Todo list?", function(response,convo){
+                convo.next();
+                if(response.text == 'yes'|| response.text == 'Yes'){
+                    convo.addQuestion("Please enter the new items for your Todo List, separated by a comma.", function(response, convo){
+                        convo.next();
+                        var parseItems = response.text.split(',');
+                        parseItems.forEach(element => {
+                            todoList.push(element);
+                        });
+                        convo.say("Thanks! Your todo list is now \n" + formatToDoList(todoList));
+                    });
+                }
+                convo.next();
+
+            });
+            convo.activate();
+        }, {}, 'default'); 
+    });
+
+//view todo list
+controller.hears(
+    ['todo', 'to-do', 'list', 'yes', 'view', 'show'],
+    ['direct_mention', 'mention', 'direct_message'],
+    function(bot, message) {
+        console.log(message.user);
+        bot.reply(message, "Here is your To-do List: \n" + formatToDoList(todoList));
+    }
+);
+
+//add single item
+controller.hears(
+    ['add', 'new', 'add todo', 'add to todo', 'new todo'],
+    ['direct_mention', 'mention', 'direct_message'],
+    function(bot, message) {
+        bot.startConversation(message, function(err, convo){
+            convo.addQuestion("Would you like to add an item to your Todo List?", function(response, convo){
+                if(response.text == "yes" || response.text == "Yes"){
+                    convo.next();
+                    convo.addQuestion("What would you like to add to your todo list?", function(response,convo){
+                        todoList.push(response.text);
+                        convo.say("Thanks! Your todo list is now \n" + formatToDoList(todoList));
+                        convo.next();
+                    }, {}, 'default');
+                }
+                convo.next();
+            });
+            convo.activate();
+        })
+    });
+
+//remove single item
+    controller.hears(
+        ['done', 'finish', 'complete', 'remove', 'off'],
+        ['direct_mention', 'mention', 'direct_message'],
+        function(bot, message) {
+            bot.startConversation(message, function(err, convo){
+                convo.addQuestion("Would you like to remove an item from the Todo List?", function(response,convo){
+                    convo.next();
+                    if(response.text == "yes" || response.text == "Yes"){
+                        convo.say("Okay, Here is your To-do List: \n" + formatToDoList(todoList));
+                        convo.addQuestion("Which item number would you like to remove?", function(response, convo){
+                            var index = response.text;
+                            console.log("Index: " + index);
+                            if (index > -1) {
+                                todoList.splice(index-1, 1);
+                            }
+                            convo.next();
+                            convo.say("Thanks! Your todo list is now \n" + formatToDoList(todoList));
+                        })
+                    }
+                    convo.next();
+                }, {}, 'default');
+    
+            });
+            
+        });
+
+    //clear entire list
+    controller.hears(
+        ['start over', 'clear', 'erase'],
+        ['direct_mention', 'mention', 'direct_message'],
+        function(bot, message) {
+            bot.startConversation(message, function(err, convo){
+                convo.addQuestion("Would you like to clear your entire Todo List?", function(response,convo){
+                    convo.next();
+                    if(response.text == "yes" || response.text == "Yes"){
+                        todoList = {};
+                        convo.say("Okay, Here is your To-do List: \n" + formatToDoList(todoList));
+                    }
+                    convo.next();
+                }, {}, 'default');
+    
+            });
+            
+        });
+
+
+//formats numbered todoList in text box
+function formatToDoList(todoList){
+    var formatted = "```";
+    if(todoList.length > 0){
+        todoList.forEach(element => {
+            formatted = formatted + (todoList.indexOf(element)+1) + ". " + element + "\n";
+        });
+    } else{
+        formatted = formatted + "Your Todo List is Empty!!";
+    }
+    formatted = formatted + "```";
+    return formatted;
+}
+
+// router.post("/", function(req, res, next) {
+//     let payload = req.body;
+//     res.sendStatus(200);
+
+//     if (payload.event.type === "app_mention") {
+//         if (payload.event.text.includes("tell me a joke")) {
+//             // Make call to chat.postMessage using bot's token
+//         }
+//     }
+// });
 
 /**
  * AN example of what could be:
