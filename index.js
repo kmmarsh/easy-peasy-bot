@@ -22,11 +22,34 @@ function onInstallation(bot, installer) {
     }
 }
 
+var nodemailer = require('nodemailer');
+
+var transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'slack.tomatobot@gmail.com',
+        pass: 'ketchup52'
+    }
+});
+
+var mailOptions = {
+    from: 'slack.tomatobot@gmail.com',
+    to: '',
+    subject: 'Default Message',
+    text: 'Default Message'
+};
+
+
 var userProfiles = {};
-userProfiles["SampleKey"] = {
-    name: "Tomato Bot",
-    phoneNumber: "8675309",
-    carrier: "Boost Mobile"
+
+var carrierMap = {
+    alltel: '@message.attel.com', 
+    att: '@txt.att.net', 
+    nextel: '@messaging.nextel.com', 
+    sprint: '@messaging.sprintpcs.com', 
+    suncom: '@tms.suncom.com',
+    tmobile: '@tmomail.net',
+    verizon: '@vtext.com'
 };
 
 /**
@@ -94,21 +117,111 @@ controller.on('bot_channel_join', function (bot, message) {
     bot.reply(message, "I'm here!")
 });
 
-/*
+var userName, userPhoneNumber, userCarrier;
+
 controller.hears(
     ['set up profile', 'profile set up'],
     ['direct_message'],
     function(bot, message) {
-
         bot.startConversation(message, function(err, convo){
-            convo.addQuestion("What is your name?", function(response, convo){
-                userProfiles[message.user].name = response.text;
-                convo.sayFirst("Hi " + userProfiles[message.user].name);
+            convo.addQuestion("Hello! What is your name?", function(response, convo){
+                controller.storage.users.get(message.user, function(err, user_data) {
+                    if (!err) {
+                        controller.storage.users.save(
+                            {
+                                ...user_data, 
+                                name: response.text
+                            });
+                    }
+                });
+                convo.sayFirst("Hi " + response.text);
+                convo.next();
             })
+            convo.addQuestion("We can set up text notifications now. You will only get them upon request. Say \'no\' to skip this step. What is your phone number?", 
+            function(response, convo){
+                if(response.text != 'no' || response.text != "No" || response.text != "NO"){
+                    controller.storage.users.get(message.user, function(err, user_data) {
+                        if (!err) {
+                            controller.storage.users.save(
+                                {
+                                    ...user_data, 
+                                    phoneNumber: response.text
+                                });
+                        }
+                    });
+                } else {
+                    setUpProfile(message.user, userName, userPhoneNumber, userCarrier);                
+                }
+                convo.next();
+            })
+            convo.addQuestion("If you want to set up text notifications, could you also tell me your cell phone carrrier? Say 'no' to skip this step. Supported carriers include Alltell, AT&T, Nextel, Sprint, SunCom, T-mobile, and Verizon.",
+            function(response, convo){
+                if(response.text != 'no' || response.text != "No" || response.text != "NO"){
+                    userCarrier = carrierMap[response.text];
+                    controller.storage.users.get(message.user, function(err, user_data) {
+                        if (!err) {
+                            controller.storage.users.save(
+                                {
+                                    ...user_data, 
+                                    carrier: userCarrier,
+                                });
+                        }
+                    });
+                    setUpPhone(message.user, userName, userPhoneNumber, userCarrier);
+                }
+                convo.next();
+            })
+            convo.say("Your profile has been set up. You will recieve a text notification if your SMS setup was successful. If you do not recieve a message, try again by saying 'set up profile'."); 
+            convo.say("You can say things like 'todo list' to view your list, or things like 'add' or 'remove' to edit that list. You can use slash commands like /timer and /break to time your work and breaks! Good luck!");
         })
-    }
+});
 
-)*/
+function saveName(name){
+    userName = name;
+    console.log("userName; " + userName);
+}
+
+function saveNumber(number){
+    userPhoneNumber = number;
+    console.log("userPhoneNumber: " + userPhoneNumber);
+}
+
+function saveCarrier(carrier){
+    userCarrier = carrierMap[carrier];
+    console.log("userCarrier: " + userCarrier);
+}
+
+function setUpProfile(user, name, phone, carrier){
+    console.log("In setUpProfile!");
+    var profile = {
+        name: name,
+        phoneNumber: phone + carrier,
+        carrierExt: carrier,
+
+    }
+    userProfiles[user] = profile;
+    if(phone && carrier){
+        setUpPhone(userProfiles[user]);
+    }
+    userName = undefined;
+    userPhoneNumber = undefined;
+    userCarrier = undefined;
+}
+
+function setUpPhone(profile){
+    mailOptions.to = profile.phoneNumber;
+    mailOptions.subject = "Confirmation Message";
+    mailOptions.text = "Your text notifications were set up successfully!"
+    console.log("setting up that phone");
+    transporter.sendMail(mailOptions, function(error, info){
+        if (error) {
+            console.log(error);
+        } else {
+            console.log('Email sent: ' + info.response);
+        }
+    })
+}
+
 
 //greeting
 controller.hears(
@@ -252,6 +365,8 @@ function formatToDoList(todoList){
  * AN example of what could be:
  * Any un-handled direct mention gets a reaction and a pat response!
  */
+
+
 //controller.on('direct_message,mention,direct_mention', function (bot, message) {
 //    bot.api.reactions.add({
 //        timestamp: message.ts,
@@ -263,4 +378,24 @@ function formatToDoList(todoList){
 //        }
 //        bot.reply(message, 'I heard you loud and clear boss.');
 //    });
-//});
+
+/*
+controller.storage.users.get(message.user, function(err, user_data) {
+    if (!err) {
+        controller.storage.users.save(
+            {
+                ...user_data, 
+                todoList: submission.api_token
+            });
+    }
+});
+
+controller.storage.teams.get(message.team.id, function(err, team_data) {
+    if (!err) {
+        controller.storage.teams.save(
+            {
+                ...team_data, 
+                v1_url: submission.url
+            });
+    }
+});*/
